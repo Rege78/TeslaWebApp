@@ -71,7 +71,7 @@
     <div class="unit">km/h</div>
 
     <section class="chart-card">
-      <h2>Speed over time</h2>
+      <h2>Speed </h2>
       <canvas id="speedChart" aria-label="Speed over time graph"></canvas>
     </section>
   </main>
@@ -81,7 +81,7 @@
     const canvas = document.getElementById("speedChart");
     const context = canvas.getContext("2d");
     const readings = [];
-    const maxReadings = 30;
+    const maxReadings = 60;
 
     function resizeCanvas() {
       const scale = window.devicePixelRatio || 1;
