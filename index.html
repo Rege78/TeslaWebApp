@@ -46,7 +46,7 @@
     h2 { margin: 0 0 10px; font-size: 1rem; font-weight: 500; color: #ddd; }
     .legend { display: flex; gap: 18px; margin-bottom: 8px; color: var(--muted); font-size: .85rem; }
     .legend span::before { content: ""; display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; background: var(--color); }
-    canvas { display: block; width: 100%; height: 280px; }
+    canvas { display: block; width: 100%; height: 480px; }
   </style>
 </head>
 <body>
@@ -81,12 +81,15 @@
     function drawChart() {
       const width = canvas.clientWidth;
       const height = canvas.clientHeight;
-      const padding = { top: 16, right: 48, bottom: 30, left: 48 };
+      const padding = { top: 22, right: 48, bottom: 30, left: 48 };
       const chartWidth = width - padding.left - padding.right;
-      const chartHeight = height - padding.top - padding.bottom;
+      const sectionGap = 42;
+      const sectionHeight = (height - padding.top - padding.bottom - sectionGap) / 2;
+      const speedTop = padding.top;
+      const accelerationTop = speedTop + sectionHeight + sectionGap;
       const speedMaximum = Math.max(10, ...readings.map((reading) => reading.speed));
       const speedScale = Math.ceil(speedMaximum / 10) * 10;
-      const accelerationMaximum = Math.max(1, ...readings.map((reading) => Math.abs(readings.length ? reading.acceleration : 0)));
+      const accelerationMaximum = Math.max(1, ...readings.map((reading) => Math.abs(reading.acceleration)));
       const accelerationScale = Math.ceil(accelerationMaximum * 2) / 2;
 
       context.clearRect(0, 0, width, height);
@@ -95,31 +98,50 @@
       context.strokeStyle = "#292929";
       context.fillStyle = "#8d8d8d";
 
-      for (let step = 0; step <= 4; step += 1) {
-        const y = padding.top + chartHeight * step / 4;
-        context.beginPath();
-        context.moveTo(padding.left, y);
-        context.lineTo(width - padding.right, y);
-        context.stroke();
-        context.fillText(Math.round(speedScale * (1 - step / 4)), 4, y + 4);
-        context.textAlign = "right";
-        context.fillText((accelerationScale * (1 - step / 4)).toFixed(1), width - 4, y + 4);
-        context.textAlign = "left";
+      function drawGrid(top, scale, formatter, includeZeroLine = false) {
+        for (let step = 0; step <= 4; step += 1) {
+          const y = top + sectionHeight * step / 4;
+          context.beginPath();
+          context.moveTo(padding.left, y);
+          context.lineTo(width - padding.right, y);
+          context.stroke();
+          context.fillText(formatter(scale * (1 - step / 4)), 4, y + 4);
+        }
+        if (includeZeroLine) {
+          const zeroY = top + sectionHeight / 2;
+          context.strokeStyle = "#555";
+          context.beginPath();
+          context.moveTo(padding.left, zeroY);
+          context.lineTo(width - padding.right, zeroY);
+          context.stroke();
+          context.strokeStyle = "#292929";
+        }
       }
+
+      drawGrid(speedTop, speedScale, (value) => Math.round(value));
+      // The acceleration axis is centered on zero, so braking is shown below it.
+      drawGrid(accelerationTop, accelerationScale * 2, (value) => (value - accelerationScale).toFixed(1), true);
+
+      context.fillStyle = "#8d8d8d";
+      context.fillText("Speed (km/h)", padding.left, speedTop - 8);
+      context.fillText("Acceleration (m/s²)", padding.left, accelerationTop - 8);
 
       if (readings.length === 0) {
         context.textAlign = "center";
-        context.fillText("Waiting for GPS speed…", width / 2, height / 2);
+        context.fillText("Waiting for GPS speed…", width / 2, speedTop + sectionHeight / 2);
         context.textAlign = "left";
         return;
       }
 
-      const pointFor = (reading, index, value, scale) => ({
-        x: padding.left + (readings.length === 1 ? chartWidth / 2 : chartWidth * index / (readings.length - 1)),
-        y: padding.top + chartHeight * (1 - value / scale)
+      const xFor = (index) => padding.left + (readings.length === 1 ? chartWidth / 2 : chartWidth * index / (readings.length - 1));
+      const speedPoint = (reading, index) => ({
+        x: xFor(index),
+        y: speedTop + sectionHeight * (1 - reading.speed / speedScale)
       });
-      const speedPoints = readings.map((reading, index) => pointFor(reading, index, reading.speed, speedScale));
-      const accelerationPoints = readings.map((reading, index) => pointFor(reading, index, Math.max(0, reading.acceleration), accelerationScale));
+      const accelerationPoint = (reading, index) => ({
+        x: xFor(index),
+        y: accelerationTop + sectionHeight * (1 - (reading.acceleration + accelerationScale) / (accelerationScale * 2))
+      });
 
       function drawLine(points, color) {
         context.beginPath();
@@ -130,14 +152,12 @@
         context.stroke();
       }
 
-      drawLine(speedPoints, "#35a7ff");
-      drawLine(accelerationPoints, "#ff9f43");
+      drawLine(readings.map(speedPoint), "#35a7ff");
+      drawLine(readings.map(accelerationPoint), "#ff9f43");
       context.fillStyle = "#8d8d8d";
-      context.fillText("Speed", 4, 12);
-      context.textAlign = "right";
-      context.fillText("Acceleration", width - 4, 12);
+      context.textAlign = "center";
+      context.fillText("time", width / 2, height - 8);
       context.textAlign = "left";
-      context.fillText("time", width / 2 - 12, height - 8);
     }
 
     function recordSpeed(speed, timestamp) {
