@@ -12,6 +12,9 @@
       --muted: #8d8d8d;
       --speed: #35a7ff;
       --acceleration: #ff9f43;
+      --motion-x: #ff5c8a;
+      --motion-y: #7ee787;
+      --motion-z: #c084fc;
     }
 
     * { box-sizing: border-box; }
@@ -43,10 +46,22 @@
       background: var(--card);
       text-align: left;
     }
+    .chart-card + .chart-card { margin-top: 18px; }
     h2 { margin: 0 0 10px; font-size: 1rem; font-weight: 500; color: #ddd; }
-    .legend { display: flex; gap: 18px; margin-bottom: 8px; color: var(--muted); font-size: .85rem; }
+    .legend { display: flex; flex-wrap: wrap; gap: 18px; margin-bottom: 8px; color: var(--muted); font-size: .85rem; }
     .legend span::before { content: ""; display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; background: var(--color); }
     canvas { display: block; width: 100%; height: 480px; }
+    #motionChart { height: 300px; }
+    #motionPermission {
+      display: none;
+      margin: 0 0 12px;
+      padding: 8px 12px;
+      border: 1px solid #444;
+      border-radius: 8px;
+      background: #222;
+      color: white;
+      cursor: pointer;
+    }
   </style>
 </head>
 <body>
@@ -61,28 +76,94 @@
       </div>
       <canvas id="speedChart" aria-label="Speed and acceleration over time graph"></canvas>
     </section>
+    <section class="chart-card">
+      <h2>Device motion over time</h2>
+      <div class="legend">
+        <span style="--color: var(--motion-x)">X</span>
+        <span style="--color: var(--motion-y)">Y</span>
+        <span style="--color: var(--motion-z)">Z</span>
+      </div>
+      <button id="motionPermission" type="button">Activer les capteurs de mouvement</button>
+      <canvas id="motionChart" aria-label="DeviceMotionEvent X, Y and Z values over time graph"></canvas>
+    </section>
   </main>
 
   <script>
     const speedElement = document.getElementById("speed");
-    const canvas = document.getElementById("speedChart");
-    const context = canvas.getContext("2d");
+    const speedCanvas = document.getElementById("speedChart");
+    const speedContext = speedCanvas.getContext("2d");
+    const motionCanvas = document.getElementById("motionChart");
+    const motionContext = motionCanvas.getContext("2d");
+    const motionPermission = document.getElementById("motionPermission");
     const readings = [];
     const maxReadings = 160;
+    let latestMotion = null;
 
-    function resizeCanvas() {
+    function resizeCanvas(canvas, context) {
       const scale = window.devicePixelRatio || 1;
       canvas.width = canvas.clientWidth * scale;
       canvas.height = canvas.clientHeight * scale;
       context.setTransform(scale, 0, 0, scale, 0, 0);
-      drawChart();
     }
 
-    function drawChart() {
-      const width = canvas.clientWidth;
-      const height = canvas.clientHeight;
-      const padding = { top: 22, right: 48, bottom: 30, left: 48 };
+    function resizeCanvases() {
+      resizeCanvas(speedCanvas, speedContext);
+      resizeCanvas(motionCanvas, motionContext);
+      drawSpeedChart();
+      drawMotionChart();
+    }
+
+    function drawGrid(context, left, right, top, height, scale, formatter, zeroLine = false) {
+      context.strokeStyle = "#292929";
+      context.fillStyle = "#8d8d8d";
+      context.lineWidth = 1;
+      for (let step = 0; step <= 4; step += 1) {
+        const y = top + height * step / 4;
+        context.beginPath();
+        context.moveTo(left, y);
+        context.lineTo(right, y);
+        context.stroke();
+        context.fillText(formatter(scale * (1 - step / 4)), 4, y + 4);
+      }
+      if (zeroLine) {
+        const zeroY = top + height / 2;
+        context.strokeStyle = "#555";
+        context.beginPath();
+        context.moveTo(left, zeroY);
+        context.lineTo(right, zeroY);
+        context.stroke();
+      }
+    }
+
+    function xFor(index, width, padding, count) {
       const chartWidth = width - padding.left - padding.right;
+      return padding.left + (count === 1 ? chartWidth / 2 : chartWidth * index / (count - 1));
+    }
+
+    function drawLine(context, points, color) {
+      context.strokeStyle = color;
+      context.lineWidth = 3;
+      let drawing = false;
+      points.forEach((point) => {
+        if (!point) {
+          drawing = false;
+          return;
+        }
+        if (!drawing) {
+          context.beginPath();
+          context.moveTo(point.x, point.y);
+          drawing = true;
+        } else {
+          context.lineTo(point.x, point.y);
+        }
+      });
+      if (drawing) context.stroke();
+    }
+
+    function drawSpeedChart() {
+      const width = speedCanvas.clientWidth;
+      const height = speedCanvas.clientHeight;
+      const padding = { top: 22, right: 48, bottom: 30, left: 48 };
       const sectionGap = 42;
       const sectionHeight = (height - padding.top - padding.bottom - sectionGap) / 2;
       const speedTop = padding.top;
@@ -92,86 +173,105 @@
       const accelerationMaximum = Math.max(1, ...readings.map((reading) => Math.abs(reading.acceleration)));
       const accelerationScale = Math.ceil(accelerationMaximum * 2) / 2;
 
-      context.clearRect(0, 0, width, height);
-      context.font = "12px system-ui, sans-serif";
-      context.lineWidth = 1;
-      context.strokeStyle = "#292929";
-      context.fillStyle = "#8d8d8d";
-
-      function drawGrid(top, scale, formatter, includeZeroLine = false) {
-        for (let step = 0; step <= 4; step += 1) {
-          const y = top + sectionHeight * step / 4;
-          context.beginPath();
-          context.moveTo(padding.left, y);
-          context.lineTo(width - padding.right, y);
-          context.stroke();
-          context.fillText(formatter(scale * (1 - step / 4)), 4, y + 4);
-        }
-        if (includeZeroLine) {
-          const zeroY = top + sectionHeight / 2;
-          context.strokeStyle = "#555";
-          context.beginPath();
-          context.moveTo(padding.left, zeroY);
-          context.lineTo(width - padding.right, zeroY);
-          context.stroke();
-          context.strokeStyle = "#292929";
-        }
-      }
-
-      drawGrid(speedTop, speedScale, (value) => Math.round(value));
-      // The acceleration axis is centered on zero, so braking is shown below it.
-      drawGrid(accelerationTop, accelerationScale * 2, (value) => (value - accelerationScale).toFixed(1), true);
-
-      context.fillStyle = "#8d8d8d";
-      context.fillText("Speed (km/h)", padding.left, speedTop - 8);
-      context.fillText("Acceleration (m/s²)", padding.left, accelerationTop - 8);
+      speedContext.clearRect(0, 0, width, height);
+      speedContext.font = "12px system-ui, sans-serif";
+      drawGrid(speedContext, padding.left, width - padding.right, speedTop, sectionHeight, speedScale, (value) => Math.round(value));
+      drawGrid(speedContext, padding.left, width - padding.right, accelerationTop, accelerationScale * 2, (value) => (value - accelerationScale).toFixed(1), true);
+      speedContext.fillStyle = "#8d8d8d";
+      speedContext.fillText("Speed (km/h)", padding.left, speedTop - 8);
+      speedContext.fillText("Acceleration (m/s²)", padding.left, accelerationTop - 8);
 
       if (readings.length === 0) {
-        context.textAlign = "center";
-        context.fillText("Waiting for GPS speed…", width / 2, speedTop + sectionHeight / 2);
-        context.textAlign = "left";
+        speedContext.textAlign = "center";
+        speedContext.fillText("Waiting for GPS speed…", width / 2, speedTop + sectionHeight / 2);
+        speedContext.textAlign = "left";
         return;
       }
 
-      const xFor = (index) => padding.left + (readings.length === 1 ? chartWidth / 2 : chartWidth * index / (readings.length - 1));
-      const speedPoint = (reading, index) => ({
-        x: xFor(index),
+      drawLine(speedContext, readings.map((reading, index) => ({
+        x: xFor(index, width, padding, readings.length),
         y: speedTop + sectionHeight * (1 - reading.speed / speedScale)
-      });
-      const accelerationPoint = (reading, index) => ({
-        x: xFor(index),
+      })), "#35a7ff");
+      drawLine(speedContext, readings.map((reading, index) => ({
+        x: xFor(index, width, padding, readings.length),
         y: accelerationTop + sectionHeight * (1 - (reading.acceleration + accelerationScale) / (accelerationScale * 2))
-      });
+      })), "#ff9f43");
+      speedContext.fillStyle = "#8d8d8d";
+      speedContext.textAlign = "center";
+      speedContext.fillText("time", width / 2, height - 8);
+      speedContext.textAlign = "left";
+    }
 
-      function drawLine(points, color) {
-        context.beginPath();
-        context.moveTo(points[0].x, points[0].y);
-        points.slice(1).forEach((point) => context.lineTo(point.x, point.y));
-        context.strokeStyle = color;
-        context.lineWidth = 3;
-        context.stroke();
+    function drawMotionChart() {
+      const width = motionCanvas.clientWidth;
+      const height = motionCanvas.clientHeight;
+      const padding = { top: 22, right: 48, bottom: 30, left: 48 };
+      const chartHeight = height - padding.top - padding.bottom;
+      const motionMaximum = Math.max(1, ...readings.flatMap((reading) => reading.motion ? [Math.abs(reading.motion.x), Math.abs(reading.motion.y), Math.abs(reading.motion.z)] : []));
+      const motionScale = Math.ceil(motionMaximum * 2) / 2;
+
+      motionContext.clearRect(0, 0, width, height);
+      motionContext.font = "12px system-ui, sans-serif";
+      drawGrid(motionContext, padding.left, width - padding.right, padding.top, chartHeight, motionScale * 2, (value) => (value - motionScale).toFixed(1), true);
+      motionContext.fillStyle = "#8d8d8d";
+      motionContext.fillText("DeviceMotionEvent (m/s²)", padding.left, padding.top - 8);
+
+      if (!readings.some((reading) => reading.motion)) {
+        motionContext.textAlign = "center";
+        motionContext.fillText("Waiting for device motion…", width / 2, height / 2);
+        motionContext.textAlign = "left";
+        return;
       }
 
-      drawLine(readings.map(speedPoint), "#35a7ff");
-      drawLine(readings.map(accelerationPoint), "#ff9f43");
-      context.fillStyle = "#8d8d8d";
-      context.textAlign = "center";
-      context.fillText("time", width / 2, height - 8);
-      context.textAlign = "left";
+      ["x", "y", "z"].forEach((axis, axisIndex) => {
+        const colors = ["#ff5c8a", "#7ee787", "#c084fc"];
+        drawLine(motionContext, readings.map((reading, index) => reading.motion ? {
+          x: xFor(index, width, padding, readings.length),
+          y: padding.top + chartHeight * (1 - (reading.motion[axis] + motionScale) / (motionScale * 2))
+        } : null), colors[axisIndex]);
+      });
+      motionContext.fillStyle = "#8d8d8d";
+      motionContext.textAlign = "center";
+      motionContext.fillText("time", width / 2, height - 8);
+      motionContext.textAlign = "left";
     }
 
     function recordSpeed(speed, timestamp) {
       const previous = readings[readings.length - 1];
       const elapsedSeconds = previous ? (timestamp - previous.time) / 1000 : 0;
       const acceleration = previous && elapsedSeconds > 0 ? (speed / 3.6 - previous.speed / 3.6) / elapsedSeconds : 0;
-      readings.push({ speed, acceleration, time: timestamp });
+      readings.push({ speed, acceleration, time: timestamp, motion: latestMotion });
       if (readings.length > maxReadings) readings.shift();
       speedElement.textContent = Math.round(speed);
-      drawChart();
+      drawSpeedChart();
+      drawMotionChart();
     }
 
-    window.addEventListener("resize", resizeCanvas);
-    resizeCanvas();
+    function handleMotion(event) {
+      const motion = event.acceleration || event.accelerationIncludingGravity;
+      if (!motion || [motion.x, motion.y, motion.z].some((value) => !Number.isFinite(value))) return;
+      latestMotion = { x: motion.x, y: motion.y, z: motion.z, time: event.timeStamp || Date.now() };
+      drawMotionChart();
+    }
+
+    function startMotionTracking() {
+      window.addEventListener("devicemotion", handleMotion);
+      motionPermission.style.display = "none";
+    }
+
+    if (typeof DeviceMotionEvent !== "undefined" && typeof DeviceMotionEvent.requestPermission === "function") {
+      motionPermission.style.display = "inline-block";
+      motionPermission.addEventListener("click", async () => {
+        try {
+          if (await DeviceMotionEvent.requestPermission() === "granted") startMotionTracking();
+        } catch (error) { console.log(error); }
+      });
+    } else if ("DeviceMotionEvent" in window) {
+      startMotionTracking();
+    }
+
+    window.addEventListener("resize", resizeCanvases);
+    resizeCanvases();
 
     navigator.geolocation.watchPosition(
       function (position) {
