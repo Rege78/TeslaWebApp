@@ -5,284 +5,54 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Speedometer</title>
   <style>
-    :root {
-      color-scheme: dark;
-      --background: #050505;
-      --card: #111;
-      --muted: #8d8d8d;
-      --speed: #35a7ff;
-      --acceleration: #ff9f43;
-      --motion-x: #ff5c8a;
-      --motion-y: #7ee787;
-      --motion-z: #c084fc;
-    }
-
-    * { box-sizing: border-box; }
-    body {
-      margin: 0;
-      min-height: 100vh;
-      padding: 24px;
-      background: var(--background);
-      color: white;
-      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      text-align: center;
-    }
-    main { width: min(900px, 100%); margin: 0 auto; }
-    #speed {
-      font-size: clamp(100px, 25vw, 200px);
-      font-weight: 300;
-      line-height: 1;
-      margin-top: 18px;
-    }
-    .unit {
-      color: var(--muted);
-      font-size: clamp(24px, 5vw, 40px);
-      margin-bottom: 28px;
-    }
-    .chart-card {
-      padding: 18px;
-      border: 1px solid #292929;
-      border-radius: 14px;
-      background: var(--card);
-      text-align: left;
-    }
-    .chart-card + .chart-card { margin-top: 18px; }
-    h2 { margin: 0 0 10px; font-size: 1rem; font-weight: 500; color: #ddd; }
-    .legend { display: flex; flex-wrap: wrap; gap: 18px; margin-bottom: 8px; color: var(--muted); font-size: .85rem; }
-    .legend span::before { content: ""; display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; background: var(--color); }
-    canvas { display: block; width: 100%; height: 480px; }
-    #motionChart { height: 300px; }
-    #motionPermission {
-      display: none;
-      margin: 0 0 12px;
-      padding: 8px 12px;
-      border: 1px solid #444;
-      border-radius: 8px;
-      background: #222;
-      color: white;
-      cursor: pointer;
-    }
+    :root { color-scheme: dark; --background:#050505; --card:#111; --muted:#8d8d8d; --speed:#35a7ff; --acceleration:#ff9f43; --motion-x:#ff5c8a; --motion-y:#7ee787; --motion-z:#c084fc; }
+    * { box-sizing:border-box; }
+    body { margin:0; min-height:100svh; padding:clamp(8px,2vh,24px); background:var(--background); color:white; font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; text-align:center; overflow-x:hidden; }
+    main { width:min(900px,100%); margin:0 auto; }
+    #speed { font-size:clamp(64px,16vh,140px); font-weight:300; line-height:.9; margin-top:clamp(4px,1vh,18px); }
+    .unit { color:var(--muted); font-size:clamp(18px,3.5vh,32px); margin-bottom:clamp(8px,2vh,28px); }
+    .chart-card { padding:clamp(8px,1.5vh,18px); border:1px solid #292929; border-radius:14px; background:var(--card); text-align:left; }
+    .chart-card + .chart-card { margin-top:clamp(8px,1.5vh,18px); }
+    h2 { margin:0 0 6px; font-size:.9rem; font-weight:500; color:#ddd; }
+    .legend { display:flex; flex-wrap:wrap; gap:10px; margin-bottom:4px; color:var(--muted); font-size:.75rem; }
+    .legend span::before { content:""; display:inline-block; width:8px; height:8px; border-radius:50%; margin-right:5px; background:var(--color); }
+    canvas { display:block; width:100%; height:clamp(250px,36vh,420px); }
+    #motionChart { height:clamp(150px,22vh,260px); }
+    #motionPermission { display:none; margin:0 0 6px; padding:5px 9px; border:1px solid #444; border-radius:8px; background:#222; color:white; cursor:pointer; font-size:.75rem; }
+    @media (max-height:700px) { #speed { font-size:clamp(56px,12vh,90px); } canvas { height:clamp(205px,31vh,280px); } #motionChart { height:clamp(125px,18vh,170px); } }
   </style>
 </head>
 <body>
   <main>
-    <div id="speed">--</div>
-    <div class="unit">km/h</div>
+    <div id="speed">--</div><div class="unit">km/h</div>
     <section class="chart-card">
       <h2>Speed and acceleration over time</h2>
-      <div class="legend">
-        <span style="--color: var(--speed)">Speed (km/h)</span>
-        <span style="--color: var(--acceleration)">Acceleration (m/s²)</span>
-      </div>
+      <div class="legend"><span style="--color:var(--speed)">Speed (km/h)</span><span style="--color:var(--acceleration)">Acceleration (m/s²)</span></div>
       <canvas id="speedChart" aria-label="Speed and acceleration over time graph"></canvas>
     </section>
     <section class="chart-card">
       <h2>Device motion over time</h2>
-      <div class="legend">
-        <span style="--color: var(--motion-x)">X</span>
-        <span style="--color: var(--motion-y)">Y</span>
-        <span style="--color: var(--motion-z)">Z</span>
-      </div>
+      <div class="legend"><span style="--color:var(--motion-x)">X</span><span style="--color:var(--motion-y)">Y</span><span style="--color:var(--motion-z)">Z</span></div>
       <button id="motionPermission" type="button">Activer les capteurs de mouvement</button>
       <canvas id="motionChart" aria-label="DeviceMotionEvent X, Y and Z values over time graph"></canvas>
     </section>
   </main>
-
   <script>
-    const speedElement = document.getElementById("speed");
-    const speedCanvas = document.getElementById("speedChart");
-    const speedContext = speedCanvas.getContext("2d");
-    const motionCanvas = document.getElementById("motionChart");
-    const motionContext = motionCanvas.getContext("2d");
-    const motionPermission = document.getElementById("motionPermission");
-    const readings = [];
-    const maxReadings = 160;
-    let latestMotion = null;
-
-    function resizeCanvas(canvas, context) {
-      const scale = window.devicePixelRatio || 1;
-      canvas.width = canvas.clientWidth * scale;
-      canvas.height = canvas.clientHeight * scale;
-      context.setTransform(scale, 0, 0, scale, 0, 0);
-    }
-
-    function resizeCanvases() {
-      resizeCanvas(speedCanvas, speedContext);
-      resizeCanvas(motionCanvas, motionContext);
-      drawSpeedChart();
-      drawMotionChart();
-    }
-
-    function drawGrid(context, left, right, top, height, scale, formatter, zeroLine = false) {
-      context.strokeStyle = "#292929";
-      context.fillStyle = "#8d8d8d";
-      context.lineWidth = 1;
-      for (let step = 0; step <= 4; step += 1) {
-        const y = top + height * step / 4;
-        context.beginPath();
-        context.moveTo(left, y);
-        context.lineTo(right, y);
-        context.stroke();
-        context.fillText(formatter(scale * (1 - step / 4)), 4, y + 4);
-      }
-      if (zeroLine) {
-        const zeroY = top + height / 2;
-        context.strokeStyle = "#555";
-        context.beginPath();
-        context.moveTo(left, zeroY);
-        context.lineTo(right, zeroY);
-        context.stroke();
-      }
-    }
-
-    function xFor(index, width, padding, count) {
-      const chartWidth = width - padding.left - padding.right;
-      return padding.left + (count === 1 ? chartWidth / 2 : chartWidth * index / (count - 1));
-    }
-
-    function drawLine(context, points, color) {
-      context.strokeStyle = color;
-      context.lineWidth = 3;
-      let drawing = false;
-      points.forEach((point) => {
-        if (!point) {
-          drawing = false;
-          return;
-        }
-        if (!drawing) {
-          context.beginPath();
-          context.moveTo(point.x, point.y);
-          drawing = true;
-        } else {
-          context.lineTo(point.x, point.y);
-        }
-      });
-      if (drawing) context.stroke();
-    }
-
-    function drawSpeedChart() {
-      const width = speedCanvas.clientWidth;
-      const height = speedCanvas.clientHeight;
-      const padding = { top: 22, right: 48, bottom: 30, left: 48 };
-      const sectionGap = 42;
-      const sectionHeight = (height - padding.top - padding.bottom - sectionGap) / 2;
-      const speedTop = padding.top;
-      const accelerationTop = speedTop + sectionHeight + sectionGap;
-      const speedMaximum = Math.max(10, ...readings.map((reading) => reading.speed));
-      const speedScale = Math.ceil(speedMaximum / 10) * 10;
-      const accelerationMaximum = Math.max(1, ...readings.map((reading) => Math.abs(reading.acceleration)));
-      const accelerationScale = Math.ceil(accelerationMaximum * 2) / 2;
-
-      speedContext.clearRect(0, 0, width, height);
-      speedContext.font = "12px system-ui, sans-serif";
-      drawGrid(speedContext, padding.left, width - padding.right, speedTop, sectionHeight, speedScale, (value) => Math.round(value));
-      drawGrid(speedContext, padding.left, width - padding.right, accelerationTop, accelerationScale * 2, (value) => (value - accelerationScale).toFixed(1), true);
-      speedContext.fillStyle = "#8d8d8d";
-      speedContext.fillText("Speed (km/h)", padding.left, speedTop - 8);
-      speedContext.fillText("Acceleration (m/s²)", padding.left, accelerationTop - 8);
-
-      if (readings.length === 0) {
-        speedContext.textAlign = "center";
-        speedContext.fillText("Waiting for GPS speed…", width / 2, speedTop + sectionHeight / 2);
-        speedContext.textAlign = "left";
-        return;
-      }
-
-      drawLine(speedContext, readings.map((reading, index) => ({
-        x: xFor(index, width, padding, readings.length),
-        y: speedTop + sectionHeight * (1 - reading.speed / speedScale)
-      })), "#35a7ff");
-      drawLine(speedContext, readings.map((reading, index) => ({
-        x: xFor(index, width, padding, readings.length),
-        y: accelerationTop + sectionHeight * (1 - (reading.acceleration + accelerationScale) / (accelerationScale * 2))
-      })), "#ff9f43");
-      speedContext.fillStyle = "#8d8d8d";
-      speedContext.textAlign = "center";
-      speedContext.fillText("time", width / 2, height - 8);
-      speedContext.textAlign = "left";
-    }
-
-    function drawMotionChart() {
-      const width = motionCanvas.clientWidth;
-      const height = motionCanvas.clientHeight;
-      const padding = { top: 22, right: 48, bottom: 30, left: 48 };
-      const chartHeight = height - padding.top - padding.bottom;
-      const motionMaximum = Math.max(1, ...readings.flatMap((reading) => reading.motion ? [Math.abs(reading.motion.x), Math.abs(reading.motion.y), Math.abs(reading.motion.z)] : []));
-      const motionScale = Math.ceil(motionMaximum * 2) / 2;
-
-      motionContext.clearRect(0, 0, width, height);
-      motionContext.font = "12px system-ui, sans-serif";
-      drawGrid(motionContext, padding.left, width - padding.right, padding.top, chartHeight, motionScale * 2, (value) => (value - motionScale).toFixed(1), true);
-      motionContext.fillStyle = "#8d8d8d";
-      motionContext.fillText("DeviceMotionEvent (m/s²)", padding.left, padding.top - 8);
-
-      if (!readings.some((reading) => reading.motion)) {
-        motionContext.textAlign = "center";
-        motionContext.fillText("Waiting for device motion…", width / 2, height / 2);
-        motionContext.textAlign = "left";
-        return;
-      }
-
-      ["x", "y", "z"].forEach((axis, axisIndex) => {
-        const colors = ["#ff5c8a", "#7ee787", "#c084fc"];
-        drawLine(motionContext, readings.map((reading, index) => reading.motion ? {
-          x: xFor(index, width, padding, readings.length),
-          y: padding.top + chartHeight * (1 - (reading.motion[axis] + motionScale) / (motionScale * 2))
-        } : null), colors[axisIndex]);
-      });
-      motionContext.fillStyle = "#8d8d8d";
-      motionContext.textAlign = "center";
-      motionContext.fillText("time", width / 2, height - 8);
-      motionContext.textAlign = "left";
-    }
-
-    function recordSpeed(speed, timestamp) {
-      const previous = readings[readings.length - 1];
-      const elapsedSeconds = previous ? (timestamp - previous.time) / 1000 : 0;
-      const acceleration = previous && elapsedSeconds > 0 ? (speed / 3.6 - previous.speed / 3.6) / elapsedSeconds : 0;
-      readings.push({ speed, acceleration, time: timestamp, motion: latestMotion });
-      if (readings.length > maxReadings) readings.shift();
-      speedElement.textContent = Math.round(speed);
-      drawSpeedChart();
-      drawMotionChart();
-    }
-
-    function handleMotion(event) {
-      const motion = event.acceleration || event.accelerationIncludingGravity;
-      if (!motion || [motion.x, motion.y, motion.z].some((value) => !Number.isFinite(value))) return;
-      latestMotion = { x: motion.x, y: motion.y, z: motion.z, time: event.timeStamp || Date.now() };
-      drawMotionChart();
-    }
-
-    function startMotionTracking() {
-      window.addEventListener("devicemotion", handleMotion);
-      motionPermission.style.display = "none";
-    }
-
-    if (typeof DeviceMotionEvent !== "undefined" && typeof DeviceMotionEvent.requestPermission === "function") {
-      motionPermission.style.display = "inline-block";
-      motionPermission.addEventListener("click", async () => {
-        try {
-          if (await DeviceMotionEvent.requestPermission() === "granted") startMotionTracking();
-        } catch (error) { console.log(error); }
-      });
-    } else if ("DeviceMotionEvent" in window) {
-      startMotionTracking();
-    }
-
-    window.addEventListener("resize", resizeCanvases);
-    resizeCanvases();
-
-    navigator.geolocation.watchPosition(
-      function (position) {
-        const metersPerSecond = position.coords.speed;
-        if (metersPerSecond !== null && Number.isFinite(metersPerSecond)) {
-          recordSpeed(metersPerSecond * 3.6, position.timestamp || Date.now());
-        }
-      },
-      function (error) { console.log(error); },
-      { enableHighAccuracy: true, maximumAge: 0, timeout: 5000 }
-    );
+    const speedElement=document.getElementById("speed"), speedCanvas=document.getElementById("speedChart"), speedContext=speedCanvas.getContext("2d"), motionCanvas=document.getElementById("motionChart"), motionContext=motionCanvas.getContext("2d"), motionPermission=document.getElementById("motionPermission");
+    const readings=[], maxReadings=160; let latestMotion=null;
+    function resizeCanvas(canvas,context){const scale=devicePixelRatio||1; canvas.width=canvas.clientWidth*scale; canvas.height=canvas.clientHeight*scale; context.setTransform(scale,0,0,scale,0,0);}
+    function resizeCanvases(){resizeCanvas(speedCanvas,speedContext); resizeCanvas(motionCanvas,motionContext); drawSpeedChart(); drawMotionChart();}
+    function drawGrid(ctx,left,right,top,height,scale,format,zero=false){ctx.strokeStyle="#292929";ctx.fillStyle="#8d8d8d";ctx.lineWidth=1;for(let i=0;i<=4;i++){const y=top+height*i/4;ctx.beginPath();ctx.moveTo(left,y);ctx.lineTo(right,y);ctx.stroke();ctx.fillText(format(scale*(1-i/4)),4,y+4);}if(zero){const y=top+height/2;ctx.strokeStyle="#555";ctx.beginPath();ctx.moveTo(left,y);ctx.lineTo(right,y);ctx.stroke();}}
+    function xFor(i,width,padding,count){const chartWidth=width-padding.left-padding.right;return padding.left+(count===1?chartWidth/2:chartWidth*i/(count-1));}
+    function drawLine(ctx,points,color){ctx.strokeStyle=color;ctx.lineWidth=3;let drawing=false;points.forEach(p=>{if(!p){drawing=false;return;}if(!drawing){ctx.beginPath();ctx.moveTo(p.x,p.y);drawing=true;}else ctx.lineTo(p.x,p.y);});if(drawing)ctx.stroke();}
+    function drawSpeedChart(){const width=speedCanvas.clientWidth,height=speedCanvas.clientHeight,p={top:18,right:42,bottom:24,left:42},gap=30,h=(height-p.top-p.bottom-gap)/2,accTop=p.top+h+gap,speedScale=Math.ceil(Math.max(10,...readings.map(r=>r.speed))/10)*10,accScale=Math.ceil(Math.max(1,...readings.map(r=>Math.abs(r.acceleration)))*2)/2;speedContext.clearRect(0,0,width,height);speedContext.font="11px system-ui,sans-serif";drawGrid(speedContext,p.left,width-p.right,p.top,h,speedScale,v=>Math.round(v));drawGrid(speedContext,p.left,width-p.right,accTop,h,accScale*2,v=>(v-accScale).toFixed(1),true);speedContext.fillStyle="#8d8d8d";speedContext.fillText("Speed (km/h)",p.left,p.top-5);speedContext.fillText("Acceleration (m/s²)",p.left,accTop-5);if(!readings.length){speedContext.textAlign="center";speedContext.fillText("Waiting for GPS speed…",width/2,p.top+h/2);speedContext.textAlign="left";return;}drawLine(speedContext,readings.map((r,i)=>({x:xFor(i,width,p,readings.length),y:p.top+h*(1-r.speed/speedScale)})),"#35a7ff");drawLine(speedContext,readings.map((r,i)=>({x:xFor(i,width,p,readings.length),y:accTop+h*(1-(r.acceleration+accScale)/(accScale*2))})),"#ff9f43");speedContext.fillStyle="#8d8d8d";speedContext.textAlign="center";speedContext.fillText("time",width/2,height-5);speedContext.textAlign="left";}
+    function drawMotionChart(){const width=motionCanvas.clientWidth,height=motionCanvas.clientHeight,p={top:18,right:42,bottom:24,left:42},h=height-p.top-p.bottom,maximum=Math.max(1,...readings.flatMap(r=>r.motion?[Math.abs(r.motion.x),Math.abs(r.motion.y),Math.abs(r.motion.z)]:[])),scale=Math.ceil(maximum*2)/2;motionContext.clearRect(0,0,width,height);motionContext.font="11px system-ui,sans-serif";drawGrid(motionContext,p.left,width-p.right,p.top,h,scale*2,v=>(v-scale).toFixed(1),true);motionContext.fillStyle="#8d8d8d";motionContext.fillText("DeviceMotionEvent (m/s²)",p.left,p.top-5);if(!readings.some(r=>r.motion)){motionContext.textAlign="center";motionContext.fillText("Waiting for device motion…",width/2,height/2);motionContext.textAlign="left";return;}["x","y","z"].forEach((axis,i)=>drawLine(motionContext,readings.map((r,n)=>r.motion?{x:xFor(n,width,p,readings.length),y:p.top+h*(1-(r.motion[axis]+scale)/(scale*2))}:null,["#ff5c8a","#7ee787","#c084fc"][i]));motionContext.fillStyle="#8d8d8d";motionContext.textAlign="center";motionContext.fillText("time",width/2,height-5);motionContext.textAlign="left";}
+    function recordSpeed(speed,time){const previous=readings[readings.length-1],elapsed=previous?(time-previous.time)/1000:0,acceleration=previous&&elapsed>0?(speed/3.6-previous.speed/3.6)/elapsed:0;readings.push({speed,acceleration,time,motion:latestMotion});if(readings.length>maxReadings)readings.shift();speedElement.textContent=Math.round(speed);drawSpeedChart();drawMotionChart();}
+    function handleMotion(event){const motion=event.acceleration||event.accelerationIncludingGravity;if(!motion||[motion.x,motion.y,motion.z].some(v=>!Number.isFinite(v)))return;latestMotion={x:motion.x,y:motion.y,z:motion.z,time:event.timeStamp||Date.now()};drawMotionChart();}
+    function startMotionTracking(){addEventListener("devicemotion",handleMotion);motionPermission.style.display="none";}
+    if(typeof DeviceMotionEvent!=="undefined"&&typeof DeviceMotionEvent.requestPermission==="function"){motionPermission.style.display="inline-block";motionPermission.onclick=async()=>{try{if(await DeviceMotionEvent.requestPermission()==="granted")startMotionTracking();}catch(error){console.log(error);}};}else if("DeviceMotionEvent"in window)startMotionTracking();
+    addEventListener("resize",resizeCanvases);resizeCanvases();
+    navigator.geolocation.watchPosition(position=>{const speed=position.coords.speed;if(speed!==null&&Number.isFinite(speed))recordSpeed(speed*3.6,position.timestamp||Date.now());},error=>console.log(error),{enableHighAccuracy:true,maximumAge:0,timeout:5000});
   </script>
 </body>
 </html>
